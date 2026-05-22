@@ -186,6 +186,36 @@
   .config-warn { background: var(--amber-bg); color: #8a6d1b; border: 1px solid #f0e0b0; padding: 14px 16px; border-radius: 10px; font-size: 13px; }
   code { background: #eef0f5; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
+  /* CRM / import */
+  .crm-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    background: var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 18px; margin-bottom:24px; }
+  .crm-bar .info { font-size:13px; color:var(--muted); }
+  .crm-bar .info b { color: var(--navy); }
+
+  /* Autocomplétion parrain */
+  .suggest { position:absolute; left:0; right:0; top:100%; z-index:20; background:#fff;
+    border:1px solid var(--border); border-radius:10px; margin-top:4px; box-shadow:0 12px 28px rgba(10,17,64,.16);
+    overflow:hidden; max-height:280px; overflow-y:auto; }
+  .suggest-item { padding:10px 13px; cursor:pointer; display:flex; align-items:center; justify-content:space-between;
+    gap:10px; border-bottom:1px solid var(--border); }
+  .suggest-item:last-child { border-bottom:none; }
+  .suggest-item:hover { background:#f3f6ff; }
+  .suggest-item .nom { font-weight:600; }
+  .suggest-item .meta { font-size:12px; color:var(--muted); }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .tag-actuel { background:var(--green-bg); color:var(--green); }
+  .tag-ancien { background:#eef0f5; color:var(--muted); }
+  .parrain-status { font-size:13px; margin-top:2px; min-height:18px; }
+  .ps-ok { color:var(--green); font-weight:600; }
+  .ps-warn { color:var(--amber); font-weight:600; }
+  .histo { grid-column:1 / -1; border:1px solid var(--border); border-radius:12px; padding:0; overflow:hidden; margin-top:-6px; }
+  .histo .htitle { background:#f7f9fe; padding:10px 14px; font-size:13px; font-weight:700; color:var(--navy); }
+  .histo table { font-size:13px; }
+  .histo th, .histo td { padding:9px 12px; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid #cdd6ee; border-top-color:var(--navy);
+    border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
   @media (max-width: 760px) {
     .grid { grid-template-columns: 1fr; }
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -272,6 +302,16 @@
       <div class="stat accent"><div class="label">Primes versées</div><div class="value" id="statMontant">0 €</div></div>
     </div>
 
+    <!-- Données locataires (CRM) -->
+    <div class="crm-bar">
+      <div class="info">Base locataires : <b id="crmCount">—</b> · dernier import <b id="crmDate">jamais</b></div>
+      <div>
+        <input id="crmFile" type="file" accept=".xlsx,.xls" style="display:none;" />
+        <button id="crmImportBtn" class="btn-primary btn-sm">Importer le fichier du jour</button>
+        <span id="crmMsg" style="font-size:13px; margin-left:10px;"></span>
+      </div>
+    </div>
+
     <!-- Formulaire -->
     <div class="card">
       <h2>Ajouter un parrainage</h2>
@@ -279,8 +319,13 @@
 
       <form id="form">
         <div class="grid">
-          <div class="field"><label for="parrainPrenom">Prénom du parrain</label><input id="parrainPrenom" required /></div>
-          <div class="field"><label for="parrainNom">Nom du parrain</label><input id="parrainNom" required /></div>
+          <div class="field full" style="position:relative;">
+            <label for="parrainSearch">Parrain (doit déjà louer ou avoir loué chez nous)</label>
+            <input id="parrainSearch" autocomplete="off" placeholder="Tape le nom du parrain..." required />
+            <div id="parrainSuggest" class="suggest hidden"></div>
+            <div id="parrainStatus" class="parrain-status"></div>
+          </div>
+          <div id="parrainHistorique" class="histo hidden"></div>
           <div class="field"><label for="filleulPrenom">Prénom du filleul</label><input id="filleulPrenom" required /></div>
           <div class="field"><label for="filleulNom">Nom du filleul</label><input id="filleulNom" required /></div>
           <div class="field"><label for="dateSignature">Date de signature du contrat</label><input id="dateSignature" type="date" required /></div>
@@ -398,9 +443,14 @@
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!sb) return;
+    const nomComplet = $("parrainSearch").value.trim();
+    if (!nomComplet) { showMsg($("formMsg"), "Indique le parrain.", "err"); return; }
+    const parts = nomComplet.split(/\s+/);
+    const prenom = parts.shift() || nomComplet;
+    const nom = parts.join(" ");
     const ligne = {
-      parrain_prenom: $("parrainPrenom").value.trim(),
-      parrain_nom: $("parrainNom").value.trim(),
+      parrain_prenom: prenom,
+      parrain_nom: nom,
       filleul_prenom: $("filleulPrenom").value.trim(),
       filleul_nom: $("filleulNom").value.trim(),
       date_signature: $("dateSignature").value,
@@ -412,6 +462,9 @@
     showMsg($("formMsg"), "Parrainage enregistré.", "ok");
     e.target.reset();
     $("paiementPreview").value = "—";
+    parrainSelectionne = null;
+    $("parrainStatus").innerHTML = "";
+    $("parrainHistorique").classList.add("hidden");
     setTimeout(() => showMsg($("formMsg"), "", ""), 2500);
     chargerListe();
   });
@@ -488,6 +541,170 @@
     XLSX.writeFile(wb, `parrainages-moovincab-${stamp}.xlsx`);
   });
 
+  // ---- Données CRM : helpers ----
+  function normaliser(s) {
+    return (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
+  }
+  function parseDateFr(s) {
+    const m = String(s || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
+  }
+  function trouverFeuille(wb, re) { return wb.SheetNames.find((n) => re.test(n)); }
+
+  async function loadCrmStatus() {
+    if (!sb) return;
+    const { count } = await sb.from("chauffeurs_crm").select("*", { count: "exact", head: true });
+    const { data } = await sb.from("chauffeurs_crm").select("import_le").order("import_le", { ascending: false }).limit(1);
+    $("crmCount").textContent = (count || 0) + " chauffeurs";
+    if (data && data.length) {
+      const d = new Date(data[0].import_le);
+      $("crmDate").textContent = d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    } else {
+      $("crmDate").textContent = "jamais";
+    }
+  }
+
+  async function insererParLots(table, rows, taille) {
+    for (let i = 0; i < rows.length; i += taille) {
+      const { error } = await sb.from(table).insert(rows.slice(i, i + taille));
+      if (error) throw new Error(error.message);
+    }
+  }
+
+  $("crmImportBtn").addEventListener("click", () => $("crmFile").click());
+  $("crmFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file || !sb) return;
+    if (!confirm("Importer ce fichier ? Les données locataires actuelles seront remplacées.")) { e.target.value = ""; return; }
+    const msg = $("crmMsg");
+    msg.innerHTML = '<span class="spin"></span> Lecture du fichier...';
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const nA = trouverFeuille(wb, /actuel/i);
+      const nH = trouverFeuille(wb, /histo/i);
+      if (!nA && !nH) throw new Error("Feuilles 'Chauffeurs Actuels' / 'Historique' introuvables.");
+      const act = nA ? XLSX.utils.sheet_to_json(wb.Sheets[nA], { defval: "" }) : [];
+      const his = nH ? XLSX.utils.sheet_to_json(wb.Sheets[nH], { defval: "" }) : [];
+
+      const locations = [];
+      act.forEach((r) => {
+        const c = (r["Chauffeur Actuel"] || "").toString().trim();
+        if (!c) return;
+        locations.push({
+          chauffeur: c, chauffeur_normalise: normaliser(c), portable: (r["Portable"] || "").toString().trim(),
+          plaque: (r["Plaque"] || "").toString().trim(), marque: (r["Marque"] || "").toString().trim(),
+          modele: (r["Modèle"] || "").toString().trim(), date_entree: parseDateFr(r["Depuis le"]),
+          date_sortie: null, actuel: true,
+        });
+      });
+      his.forEach((r) => {
+        const c = (r["Chauffeur"] || "").toString().trim();
+        if (!c) return;
+        locations.push({
+          chauffeur: c, chauffeur_normalise: normaliser(c), portable: (r["Portable"] || "").toString().trim(),
+          plaque: (r["Plaque"] || "").toString().trim(), marque: (r["Marque"] || "").toString().trim(),
+          modele: (r["Modèle"] || "").toString().trim(), date_entree: parseDateFr(r["Date Entrée"]),
+          date_sortie: parseDateFr(r["Date Sortie"]), actuel: false,
+        });
+      });
+
+      const map = new Map();
+      locations.forEach((l) => {
+        const k = l.chauffeur_normalise;
+        if (!k) return;
+        let ent = map.get(k);
+        if (!ent) { ent = { chauffeur: l.chauffeur, chauffeur_normalise: k, portable: l.portable, actuel: false, nb_locations: 0 }; map.set(k, ent); }
+        ent.nb_locations++;
+        if (l.actuel) { ent.actuel = true; ent.chauffeur = l.chauffeur; if (l.portable) ent.portable = l.portable; }
+        if (!ent.portable && l.portable) ent.portable = l.portable;
+      });
+      const chauffeurs = Array.from(map.values());
+
+      msg.innerHTML = '<span class="spin"></span> Mise à jour de la base (' + chauffeurs.length + ' chauffeurs)...';
+      await sb.from("locations_crm").delete().not("id", "is", null);
+      await sb.from("chauffeurs_crm").delete().not("id", "is", null);
+      await insererParLots("chauffeurs_crm", chauffeurs, 500);
+      await insererParLots("locations_crm", locations, 500);
+
+      msg.innerHTML = '<span style="color:var(--green);font-weight:600;">Import terminé : ' + chauffeurs.length + ' chauffeurs, ' + locations.length + ' locations.</span>';
+      loadCrmStatus();
+      setTimeout(() => { msg.innerHTML = ""; }, 6000);
+    } catch (err) {
+      msg.innerHTML = '<span style="color:var(--danger);font-weight:600;">Erreur : ' + escapeHtml(err.message) + '</span>';
+    } finally {
+      e.target.value = "";
+    }
+  });
+
+  // ---- Autocomplétion / vérification du parrain ----
+  let parrainSelectionne = null;
+  let debounceTimer = null;
+
+  $("parrainSearch").addEventListener("input", (e) => {
+    parrainSelectionne = null;
+    $("parrainHistorique").classList.add("hidden");
+    const val = e.target.value.trim();
+    clearTimeout(debounceTimer);
+    if (val.length < 2) { $("parrainSuggest").classList.add("hidden"); $("parrainStatus").innerHTML = ""; return; }
+    debounceTimer = setTimeout(() => rechercherChauffeurs(val), 250);
+  });
+
+  async function rechercherChauffeurs(val) {
+    if (!sb) return;
+    const q = normaliser(val);
+    const { data, error } = await sb.from("chauffeurs_crm").select("*")
+      .ilike("chauffeur_normalise", "%" + q + "%")
+      .order("actuel", { ascending: false }).limit(8);
+    const box = $("parrainSuggest");
+    if (error || !data || data.length === 0) {
+      box.classList.add("hidden");
+      $("parrainStatus").innerHTML = '<span class="ps-warn">Ce parrain n\'a jamais loué chez nous.</span>';
+      return;
+    }
+    $("parrainStatus").innerHTML = "";
+    box.innerHTML = data.map((c) => {
+      const tag = c.actuel ? '<span class="tag tag-actuel">En location</span>' : '<span class="tag tag-ancien">Ancien</span>';
+      return `<div class="suggest-item" data-norm="${escapeHtml(c.chauffeur_normalise)}" data-nom="${escapeHtml(c.chauffeur)}">
+        <span><span class="nom">${escapeHtml(c.chauffeur)}</span><br><span class="meta">${escapeHtml(c.portable || "")} · ${c.nb_locations} location(s)</span></span>
+        ${tag}</div>`;
+    }).join("");
+    box.classList.remove("hidden");
+  }
+
+  $("parrainSuggest").addEventListener("click", (e) => {
+    const item = e.target.closest(".suggest-item");
+    if (!item) return;
+    $("parrainSearch").value = item.dataset.nom;
+    parrainSelectionne = { chauffeur: item.dataset.nom, chauffeur_normalise: item.dataset.norm };
+    $("parrainSuggest").classList.add("hidden");
+    $("parrainStatus").innerHTML = '<span class="ps-ok">A déjà loué chez nous.</span>';
+    chargerHistoriqueParrain(item.dataset.norm);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#parrainSearch") && !e.target.closest("#parrainSuggest")) {
+      $("parrainSuggest").classList.add("hidden");
+    }
+  });
+
+  async function chargerHistoriqueParrain(norm) {
+    if (!sb) return;
+    const { data, error } = await sb.from("locations_crm").select("*")
+      .eq("chauffeur_normalise", norm).order("date_entree", { ascending: false });
+    const panel = $("parrainHistorique");
+    if (error || !data || data.length === 0) { panel.classList.add("hidden"); return; }
+    const lignes = data.map((l) => {
+      const veh = [l.marque, l.modele, l.plaque].filter(Boolean).join(" · ");
+      const entree = l.date_entree ? frDate(l.date_entree) : "—";
+      const sortie = l.date_sortie ? frDate(l.date_sortie) : '<span style="color:var(--green);font-weight:600;">en cours</span>';
+      return `<tr><td>${escapeHtml(veh)}</td><td>${entree}</td><td>${sortie}</td></tr>`;
+    }).join("");
+    panel.innerHTML = `<div class="htitle">Historique de location (${data.length})</div>
+      <table><thead><tr><th>Véhicule</th><th>Entrée</th><th>Sortie</th></tr></thead><tbody>${lignes}</tbody></table>`;
+    panel.classList.remove("hidden");
+  }
+
   // ---- Session ----
   function montrerApp(session) {
     if (session) {
@@ -495,6 +712,7 @@
       app.classList.remove("hidden");
       $("userEmail").textContent = session.user.email;
       chargerListe();
+      loadCrmStatus();
     } else {
       app.classList.add("hidden");
       authScreen.classList.remove("hidden");
