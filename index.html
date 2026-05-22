@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MOOV'IN.CAB · Parrainages</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --navy:      #0a1140;
+    --navy-2:    #131d63;
+    --navy-3:    #060a2b;
+    --gold:      #e7b24c;
+    --accent:    #4d7bff;
+    --bg:        #eef1f8;
+    --card:      #ffffff;
+    --border:    #e3e7f1;
+    --text:      #131a36;
+    --muted:     #717a99;
+    --green:     #189d5b;
+    --green-bg:  #e6f6ed;
+    --amber:     #b07d12;
+    --amber-bg:  #fbf1d8;
+    --danger:    #cf3a2c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  /* ---------- Logo / monogramme ---------- */
+  .logo { display: inline-flex; align-items: center; gap: 12px; }
+  .logo svg { width: 30px; height: 30px; display: block; }
+  .logo .divider { width: 1px; height: 26px; background: currentColor; opacity: .55; }
+  .logo .word { font-weight: 800; letter-spacing: .14em; font-size: 17px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes driftBg {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shimmer {
+    0%   { transform: translateX(-120%); }
+    100% { transform: translateX(220%); }
+  }
+  .fade-up { animation: fadeUp .5s ease both; }
+
+  /* ---------- Écran de connexion ---------- */
+  .auth-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    color: #fff;
+    background: linear-gradient(125deg, var(--navy-3), var(--navy), var(--navy-2), var(--navy));
+    background-size: 300% 300%;
+    animation: driftBg 18s ease infinite;
+    position: relative;
+    overflow: hidden;
+  }
+  .auth-wrap::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size: 26px 26px;
+    pointer-events: none;
+  }
+  .auth-inner { width: 100%; max-width: 400px; position: relative; z-index: 1; }
+  .auth-brand { text-align: center; margin-bottom: 22px; color: #fff; }
+  .auth-brand .tag { display: block; margin-top: 10px; font-size: 13px; letter-spacing: .04em; color: rgba(255,255,255,.7); }
+  .auth-card {
+    background: var(--card);
+    color: var(--text);
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: 0 30px 60px rgba(6,10,43,.45);
+    animation: fadeUp .55s ease both;
+  }
+  .auth-card h2 { margin: 0 0 4px; font-size: 19px; }
+  .auth-card .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+  /* ---------- App ---------- */
+  #app { animation: fadeUp .4s ease both; }
+  header.topbar {
+    background: linear-gradient(120deg, var(--navy), var(--navy-2));
+    color: #fff;
+    padding: 16px 26px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 18px rgba(10,17,64,.25);
+  }
+  .user-zone { display: flex; align-items: center; gap: 14px; font-size: 14px; color: rgba(255,255,255,.85); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 60px; }
+
+  /* ---------- Stats ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 26px; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .stat:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(10,17,64,.10); }
+  .stat .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .stat .value { font-size: 28px; font-weight: 800; margin-top: 6px; color: var(--navy); }
+  .stat.accent .value { color: var(--gold); }
+
+  /* ---------- Cartes ---------- */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 10px rgba(10,17,64,.04);
+  }
+  .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 13px; font-weight: 600; }
+  input {
+    padding: 11px 13px; border: 1px solid var(--border); border-radius: 9px;
+    font-size: 14px; width: 100%; background: #fff; color: var(--text);
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(77,123,255,.15); }
+
+  .prime-box {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(120deg, var(--navy), var(--navy-2));
+    color: #fff; border-radius: 12px; padding: 14px 18px;
+  }
+  .prime-box .l { font-size: 13px; color: rgba(255,255,255,.8); }
+  .prime-box .v { font-size: 22px; font-weight: 800; color: var(--gold); }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  button { cursor: pointer; border: none; border-radius: 9px; font-size: 14px; font-weight: 600; padding: 11px 18px; transition: all .15s ease; }
+  .btn-primary { background: var(--navy); color: #fff; position: relative; overflow: hidden; }
+  .btn-primary:hover { background: var(--navy-2); }
+  .btn-primary::after {
+    content: ""; position: absolute; top: 0; left: 0; width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
+    transform: translateX(-120%);
+  }
+  .btn-primary:hover::after { animation: shimmer .9s ease; }
+  .btn-gold { background: var(--gold); color: var(--navy-3); }
+  .btn-gold:hover { filter: brightness(1.06); }
+  .btn-ghost { background: transparent; color: var(--navy); padding: 7px 10px; }
+  .btn-ghost:hover { background: #eef1f8; }
+  .btn-light { background: rgba(255,255,255,.14); color: #fff; padding: 7px 12px; }
+  .btn-light:hover { background: rgba(255,255,255,.24); }
+  .btn-link { background: none; color: var(--accent); padding: 0; font-weight: 600; text-decoration: underline; }
+  .btn-sm { padding: 7px 11px; font-size: 13px; }
+  .row-end { display: flex; justify-content: flex-end; gap: 12px; margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 13px 11px; border-bottom: 1px solid var(--border); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tbody tr { animation: fadeUp .35s ease both; }
+  tbody tr:hover { background: #f7f9fe; }
+  .badge { display: inline-block; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .badge-paye { background: var(--green-bg); color: var(--green); }
+  .badge-attente { background: var(--amber-bg); color: var(--amber); }
+  .empty { text-align: center; color: var(--muted); padding: 36px; font-size: 14px; }
+
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar .actions { display: flex; gap: 10px; }
+
+  .msg { font-size: 13px; padding: 10px 13px; border-radius: 9px; margin-top: 12px; }
+  .msg-err { background: #fdecea; color: var(--danger); }
+  .msg-ok { background: var(--green-bg); color: var(--green); }
+  .hidden { display: none !important; }
+  .config-warn { background: var(--amber-bg); color: #8a6d1b; border: 1px solid #f0e0b0; padding: 14px 16px; border-radius: 10px; font-size: 13px; }
+  code { background: #eef0f5; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- =========================================================
+     CONFIG Supabase (Project Settings > API)
+========================================================= -->
+<script>
+  const SUPABASE_URL = "https://etomxfjlochljplmrgfy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0b214Zmpsb2NobGpwbG1yZ2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MTYzOTIsImV4cCI6MjA5NDk5MjM5Mn0.TpdyAErWFmdT2_iHyMeC8xnrHKDdGiQC4R36QDtIQ18";
+  const MONTANT_PRIME = 100; // prime fixe en euros
+</script>
+
+<!-- Monogramme réutilisable -->
+<template id="logoSvg">
+  <svg viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M5 33 L5 9 L20 25 L35 9 L35 33" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="20" y1="17" x2="20" y2="33" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+  </svg>
+</template>
+
+<!-- ===================== CONNEXION ===================== -->
+<div id="authScreen" class="auth-wrap">
+  <div class="auth-inner">
+    <div class="auth-brand">
+      <span class="logo" data-logo style="color:#fff;">
+        <span class="divider"></span>
+        <span class="word">MOOV'IN.CAB</span>
+      </span>
+      <span class="tag">Programme de parrainage</span>
+    </div>
+
+    <div class="auth-card">
+      <h2 id="authTitle">Connexion</h2>
+      <p class="sub">Accès réservé aux membres de l'entreprise.</p>
+
+      <div id="configWarn" class="config-warn hidden">
+        Supabase n'est pas configuré. Renseigne <code>SUPABASE_URL</code> et <code>SUPABASE_ANON_KEY</code> en haut du fichier.
+      </div>
+
+      <div class="field" style="margin-bottom:12px;">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="prenom@moov-in-cab.fr" />
+      </div>
+      <div class="field" style="margin-bottom:18px;">
+        <label for="password">Mot de passe</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+
+      <button id="authBtn" class="btn-primary" style="width:100%;">Se connecter</button>
+      <div id="authMsg"></div>
+
+      <p style="margin-top:16px; font-size:13px; color:var(--muted);">
+        <span id="authSwitchText">Pas encore de compte ?</span>
+        <button id="authSwitch" class="btn-link">Créer un compte</button>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <span class="logo" data-logo style="color:#fff;">
+      <span class="divider"></span>
+      <span class="word">MOOV'IN.CAB</span>
+    </span>
+    <div class="user-zone">
+      <span id="userEmail"></span>
+      <button id="logoutBtn" class="btn-light btn-sm">Déconnexion</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat"><div class="label">Parrainages</div><div class="value" id="statTotal">0</div></div>
+      <div class="stat"><div class="label">En attente</div><div class="value" id="statAttente">0</div></div>
+      <div class="stat"><div class="label">Payés</div><div class="value" id="statPaye">0</div></div>
+      <div class="stat accent"><div class="label">Primes versées</div><div class="value" id="statMontant">0 €</div></div>
+    </div>
+
+    <!-- Formulaire -->
+    <div class="card">
+      <h2>Ajouter un parrainage</h2>
+      <p class="sub">La date de paiement est calculée automatiquement : 1 mois après la signature du contrat par le parrain.</p>
+
+      <form id="form">
+        <div class="grid">
+          <div class="field"><label for="parrainPrenom">Prénom du parrain</label><input id="parrainPrenom" required /></div>
+          <div class="field"><label for="parrainNom">Nom du parrain</label><input id="parrainNom" required /></div>
+          <div class="field"><label for="filleulPrenom">Prénom du filleul</label><input id="filleulPrenom" required /></div>
+          <div class="field"><label for="filleulNom">Nom du filleul</label><input id="filleulNom" required /></div>
+          <div class="field"><label for="dateSignature">Date de signature du contrat</label><input id="dateSignature" type="date" required /></div>
+          <div class="field"><label>Date de paiement (auto)</label><input id="paiementPreview" type="text" value="—" readonly style="background:#f3f5fb;" /></div>
+
+          <div class="prime-box">
+            <span class="l">Prime de parrainage</span>
+            <span class="v">100 €</span>
+          </div>
+        </div>
+        <div class="row-end"><button type="submit" class="btn-primary">Enregistrer le parrainage</button></div>
+        <div id="formMsg"></div>
+      </form>
+    </div>
+
+    <!-- Liste -->
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0;">Parrainages enregistrés</h2>
+        <div class="actions">
+          <button id="refreshBtn" class="btn-ghost btn-sm">Actualiser</button>
+          <button id="exportBtn" class="btn-gold btn-sm">Exporter en Excel</button>
+        </div>
+      </div>
+      <div id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Parrain</th><th>Filleul</th><th>Signature</th><th>Paiement prévu</th><th>Prime</th><th>Statut</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="emptyState" class="empty hidden">Aucun parrainage pour le moment.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // ---- Injection du monogramme ----
+  document.querySelectorAll("[data-logo]").forEach((el) => {
+    const svg = document.getElementById("logoSvg").content.cloneNode(true);
+    el.insertBefore(svg, el.firstChild);
+  });
+
+  // ---- Supabase ----
+  const isConfigured =
+    SUPABASE_URL && !SUPABASE_URL.includes("VOTRE-PROJET") &&
+    SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("VOTRE_CLE");
+  let sb = isConfigured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  const $ = (id) => document.getElementById(id);
+  const authScreen = $("authScreen");
+  const app = $("app");
+  let mode = "login";
+  let parrainagesData = [];
+
+  function showMsg(el, text, type) {
+    el.innerHTML = text ? `<div class="msg ${type === "ok" ? "msg-ok" : "msg-err"}">${text}</div>` : "";
+  }
+  function frDate(d) {
+    if (!d) return "—";
+    const [y, m, day] = d.split("-");
+    return `${day}/${m}/${y}`;
+  }
+  function plusUnMois(dateStr) {
+    if (!dateStr) return "—";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    let ny = y, nm = m + 1; if (nm > 12) { nm = 1; ny++; }
+    const dernierJour = new Date(ny, nm, 0).getDate();
+    const nd = Math.min(d, dernierJour);
+    return frDate(`${ny}-${String(nm).padStart(2, "0")}-${String(nd).padStart(2, "0")}`);
+  }
+  function euro(n) {
+    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(n) || 0);
+  }
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  $("dateSignature").addEventListener("input", (e) => { $("paiementPreview").value = plusUnMois(e.target.value); });
+
+  $("authSwitch").addEventListener("click", () => {
+    mode = mode === "login" ? "signup" : "login";
+    $("authTitle").textContent = mode === "login" ? "Connexion" : "Créer un compte";
+    $("authBtn").textContent = mode === "login" ? "Se connecter" : "Créer le compte";
+    $("authSwitchText").textContent = mode === "login" ? "Pas encore de compte ?" : "Déjà un compte ?";
+    $("authSwitch").textContent = mode === "login" ? "Créer un compte" : "Se connecter";
+    showMsg($("authMsg"), "", "");
+  });
+
+  $("authBtn").addEventListener("click", async () => {
+    if (!sb) { showMsg($("authMsg"), "Supabase n'est pas configuré.", "err"); return; }
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) { showMsg($("authMsg"), "Renseigne l'email et le mot de passe.", "err"); return; }
+    $("authBtn").disabled = true;
+    try {
+      if (mode === "login") {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        showMsg($("authMsg"), "Compte créé. Si la confirmation par email est activée, vérifie ta boîte mail avant de te connecter.", "ok");
+      }
+    } catch (err) {
+      showMsg($("authMsg"), err.message || "Erreur de connexion.", "err");
+    } finally { $("authBtn").disabled = false; }
+  });
+
+  $("logoutBtn").addEventListener("click", async () => { if (sb) await sb.auth.signOut(); });
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!sb) return;
+    const ligne = {
+      parrain_prenom: $("parrainPrenom").value.trim(),
+      parrain_nom: $("parrainNom").value.trim(),
+      filleul_prenom: $("filleulPrenom").value.trim(),
+      filleul_nom: $("filleulNom").value.trim(),
+      date_signature: $("dateSignature").value,
+      montant_prime: MONTANT_PRIME,
+    };
+    if (!ligne.date_signature) { showMsg($("formMsg"), "Indique la date de signature.", "err"); return; }
+    const { error } = await sb.from("parrainages").insert(ligne);
+    if (error) { showMsg($("formMsg"), error.message, "err"); return; }
+    showMsg($("formMsg"), "Parrainage enregistré.", "ok");
+    e.target.reset();
+    $("paiementPreview").value = "—";
+    setTimeout(() => showMsg($("formMsg"), "", ""), 2500);
+    chargerListe();
+  });
+
+  function majStats() {
+    const total = parrainagesData.length;
+    const payes = parrainagesData.filter((p) => p.statut === "paye");
+    $("statTotal").textContent = total;
+    $("statPaye").textContent = payes.length;
+    $("statAttente").textContent = total - payes.length;
+    const montant = payes.reduce((s, p) => s + (Number(p.montant_prime) || 0), 0);
+    $("statMontant").textContent = euro(montant);
+  }
+
+  async function chargerListe() {
+    if (!sb) return;
+    const { data, error } = await sb.from("parrainages").select("*").order("created_at", { ascending: false });
+    const tbody = $("tbody");
+    if (error) { tbody.innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(error.message)}</td></tr>`; return; }
+    parrainagesData = data || [];
+    majStats();
+    if (parrainagesData.length === 0) { tbody.innerHTML = ""; $("emptyState").classList.remove("hidden"); return; }
+    $("emptyState").classList.add("hidden");
+    tbody.innerHTML = parrainagesData.map((p) => {
+      const paye = p.statut === "paye";
+      const badge = paye ? '<span class="badge badge-paye">Payé</span>' : '<span class="badge badge-attente">En attente</span>';
+      const action = paye
+        ? `<button class="btn-ghost btn-sm" data-action="annuler" data-id="${p.id}">Repasser en attente</button>`
+        : `<button class="btn-ghost btn-sm" data-action="payer" data-id="${p.id}">Marquer payé</button>`;
+      return `<tr>
+        <td>${escapeHtml(p.parrain_prenom)} ${escapeHtml(p.parrain_nom)}</td>
+        <td>${escapeHtml(p.filleul_prenom)} ${escapeHtml(p.filleul_nom)}</td>
+        <td>${frDate(p.date_signature)}</td>
+        <td>${frDate(p.date_paiement)}</td>
+        <td>${euro(p.montant_prime)}</td>
+        <td>${badge}</td>
+        <td style="text-align:right;">${action}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  $("tbody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn || !sb) return;
+    const id = btn.dataset.id;
+    const nouveauStatut = btn.dataset.action === "payer" ? "paye" : "en_attente";
+    btn.disabled = true;
+    const { error } = await sb.from("parrainages").update({ statut: nouveauStatut }).eq("id", id);
+    if (error) { alert(error.message); btn.disabled = false; return; }
+    chargerListe();
+  });
+
+  $("refreshBtn").addEventListener("click", chargerListe);
+
+  // ---- Export Excel ----
+  $("exportBtn").addEventListener("click", () => {
+    if (!parrainagesData.length) { alert("Aucun parrainage à exporter."); return; }
+    const lignes = parrainagesData.map((p) => ({
+      "Prénom parrain": p.parrain_prenom,
+      "Nom parrain": p.parrain_nom,
+      "Prénom filleul": p.filleul_prenom,
+      "Nom filleul": p.filleul_nom,
+      "Date signature": frDate(p.date_signature),
+      "Date paiement prévue": frDate(p.date_paiement),
+      "Prime (€)": Number(p.montant_prime) || 0,
+      "Statut": p.statut === "paye" ? "Payé" : "En attente",
+    }));
+    const ws = XLSX.utils.json_to_sheet(lignes);
+    ws["!cols"] = [{ wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 15 }, { wch: 18 }, { wch: 10 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Parrainages");
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    XLSX.writeFile(wb, `parrainages-moovincab-${stamp}.xlsx`);
+  });
+
+  // ---- Session ----
+  function montrerApp(session) {
+    if (session) {
+      authScreen.classList.add("hidden");
+      app.classList.remove("hidden");
+      $("userEmail").textContent = session.user.email;
+      chargerListe();
+    } else {
+      app.classList.add("hidden");
+      authScreen.classList.remove("hidden");
+    }
+  }
+  async function init() {
+    if (!isConfigured) { $("configWarn").classList.remove("hidden"); $("authBtn").disabled = true; return; }
+    const { data } = await sb.auth.getSession();
+    montrerApp(data.session);
+    sb.auth.onAuthStateChange((_e, session) => montrerApp(session));
+  }
+  init();
+</script>
+</body>
+</html>
