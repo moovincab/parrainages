@@ -1,0 +1,24 @@
+name: Rappel paiements parrainages
+
+on:
+  schedule:
+    # Tous les jours a 08:00 UTC (10h Paris en ete, 9h en hiver)
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Envoyer le rappel
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DEST_EMAIL: v.madryga@moov-in-cab.fr
+          FROM_EMAIL: "MOOV'IN.CAB Parrainages <onboarding@resend.dev>"
+        run: node .github/scripts/rappel-paiements.mjs
