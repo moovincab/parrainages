@@ -14,11 +14,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Installer nodemailer
+        run: |
+          npm init -y
+          npm install nodemailer
       - name: Envoyer le rappel
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DEST_EMAIL: v.madryga@moov-in-cab.fr
-          FROM_EMAIL: "MOOV'IN.CAB Parrainages <onboarding@resend.dev>"
         run: node .github/scripts/rappel-paiements.mjs
