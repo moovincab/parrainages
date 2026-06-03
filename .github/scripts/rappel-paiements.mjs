@@ -1,18 +1,20 @@
 // Rappel quotidien des primes de parrainage à payer.
-// Interroge Supabase, envoie un email récap via Resend si besoin.
+// Interroge Supabase, envoie un email récap via Gmail SMTP si besoin.
 // Variables d'environnement requises :
 //   SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY  (clé secrète, bypass RLS)
-//   RESEND_API_KEY
-//   DEST_EMAIL
-//   FROM_EMAIL
+//   GMAIL_USER                 (ex: mehdizaied28@gmail.com)
+//   GMAIL_APP_PASSWORD         (mot de passe d'application Gmail)
+//   DEST_EMAIL                 (destinataire)
+
+import nodemailer from "nodemailer";
 
 const {
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
-  RESEND_API_KEY,
+  GMAIL_USER,
+  GMAIL_APP_PASSWORD,
   DEST_EMAIL,
-  FROM_EMAIL,
 } = process.env;
 
 function frDate(d) {
@@ -35,7 +37,6 @@ function joursDeRetard(datePaiement, aujourdhui) {
 async function main() {
   const today = isoToday();
 
-  // Récupérer les parrainages dont date_paiement <= today et statut = en_attente
   const url = `${SUPABASE_URL}/rest/v1/parrainages`
     + `?statut=eq.en_attente`
     + `&date_paiement=lte.${today}`
@@ -103,24 +104,19 @@ async function main() {
     </div>
   </body></html>`;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: FROM_EMAIL,
-      to: [DEST_EMAIL],
-      subject,
-      html,
-    }),
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
   });
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(`Resend ${res.status} : ${JSON.stringify(body)}`);
-  }
-  console.log("Email envoyé, id Resend :", body.id);
+
+  const info = await transporter.sendMail({
+    from: `"MOOV'IN.CAB Parrainages" <${GMAIL_USER}>`,
+    to: DEST_EMAIL,
+    subject,
+    html,
+  });
+
+  console.log("Email envoyé, messageId :", info.messageId);
 }
 
 main().catch((e) => {
