@@ -306,8 +306,8 @@
     <div class="crm-bar">
       <div class="info">Base locataires : <b id="crmCount">—</b> · dernier import <b id="crmDate">jamais</b></div>
       <div>
-        <input id="crmFile" type="file" accept=".xlsx,.xls" style="display:none;" />
-        <button id="crmImportBtn" class="btn-primary btn-sm">Importer le fichier du jour</button>
+        <input id="crmFile" type="file" accept=".xlsx,.xls" multiple style="display:none;" />
+        <button id="crmImportBtn" class="btn-primary btn-sm">Importer les fichiers du jour</button>
         <span id="crmMsg" style="font-size:13px; margin-left:10px;"></span>
       </div>
     </div>
@@ -324,6 +324,10 @@
             <input id="parrainSearch" autocomplete="off" placeholder="Tape le nom du parrain..." required />
             <div id="parrainSuggest" class="suggest hidden"></div>
             <div id="parrainStatus" class="parrain-status"></div>
+          </div>
+          <div class="field full">
+            <label for="parrainEmail">Email du parrain (pour l'envoi de la confirmation)</label>
+            <input id="parrainEmail" type="email" autocomplete="off" placeholder="email@exemple.com" />
           </div>
           <div id="parrainHistorique" class="histo hidden"></div>
           <div class="field"><label for="filleulPrenom">Prénom du filleul</label><input id="filleulPrenom" required /></div>
@@ -451,6 +455,7 @@
     const ligne = {
       parrain_prenom: prenom,
       parrain_nom: nom,
+      parrain_email: $("parrainEmail").value.trim() || null,
       filleul_prenom: $("filleulPrenom").value.trim(),
       filleul_nom: $("filleulNom").value.trim(),
       date_signature: $("dateSignature").value,
@@ -550,12 +555,20 @@
     return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
   }
   function trouverFeuille(wb, re) { return wb.SheetNames.find((n) => re.test(n)); }
+  function normPhone(p) {
+    if (!p) return null;
+    let d = String(p).replace(/\D/g, "");
+    if (d.startsWith("33")) d = "0" + d.slice(2);
+    if (d.length !== 10) return null;
+    return d;
+  }
 
   async function loadCrmStatus() {
     if (!sb) return;
     const { count } = await sb.from("chauffeurs_crm").select("*", { count: "exact", head: true });
+    const emailRes = await sb.from("chauffeurs_crm").select("*", { count: "exact", head: true }).not("email", "is", null);
     const { data } = await sb.from("chauffeurs_crm").select("import_le").order("import_le", { ascending: false }).limit(1);
-    $("crmCount").textContent = (count || 0) + " chauffeurs";
+    $("crmCount").textContent = `${count || 0} chauffeurs (${emailRes.count || 0} avec email)`;
     if (data && data.length) {
       const d = new Date(data[0].import_le);
       $("crmDate").textContent = d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -573,19 +586,52 @@
 
   $("crmImportBtn").addEventListener("click", () => $("crmFile").click());
   $("crmFile").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file || !sb) return;
-    if (!confirm("Importer ce fichier ? Les données locataires actuelles seront remplacées.")) { e.target.value = ""; return; }
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !sb) return;
+    if (!confirm(`Importer ${files.length} fichier${files.length > 1 ? "s" : ""} ? Les données locataires actuelles seront remplacées.`)) {
+      e.target.value = ""; return;
+    }
     const msg = $("crmMsg");
-    msg.innerHTML = '<span class="spin"></span> Lecture du fichier...';
+    msg.innerHTML = '<span class="spin"></span> Lecture des fichiers...';
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const nA = trouverFeuille(wb, /actuel/i);
-      const nH = trouverFeuille(wb, /histo/i);
-      if (!nA && !nH) throw new Error("Feuilles 'Chauffeurs Actuels' / 'Historique' introuvables.");
-      const act = nA ? XLSX.utils.sheet_to_json(wb.Sheets[nA], { defval: "" }) : [];
-      const his = nH ? XLSX.utils.sheet_to_json(wb.Sheets[nH], { defval: "" }) : [];
+      let act = [], his = [], contactsRows = [];
+      let fleetFound = false, contactsFound = false;
+
+      for (const file of files) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const nA = trouverFeuille(wb, /actuel/i);
+        const nH = trouverFeuille(wb, /histo/i);
+        if (nA || nH) {
+          fleetFound = true;
+          if (nA) act = act.concat(XLSX.utils.sheet_to_json(wb.Sheets[nA], { defval: "" }));
+          if (nH) his = his.concat(XLSX.utils.sheet_to_json(wb.Sheets[nH], { defval: "" }));
+        } else {
+          const nC = wb.SheetNames[0];
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[nC], { defval: "" });
+          if (rows.length && (rows[0]["Email"] !== undefined || rows[0]["E-mail"] !== undefined)) {
+            contactsFound = true;
+            contactsRows = contactsRows.concat(rows);
+          }
+        }
+      }
+      if (!fleetFound) throw new Error("Fichier flotte introuvable (feuilles 'Chauffeurs Actuels' / 'Historique par Plaque').");
+
+      // Index emails depuis le fichier Contacts
+      const byPhone = new Map();
+      const byNom = new Map();
+      contactsRows.forEach((r) => {
+        const email = (r["Email"] || r["E-mail"] || "").toString().trim();
+        if (!email) return;
+        for (const k of ["Portable", "Portable alternatif", "Téléphone direct", "Téléphone standard"]) {
+          const ph = normPhone(r[k]);
+          if (ph && !byPhone.has(ph)) byPhone.set(ph, email);
+        }
+        const k1 = normaliser((r["Prénom"] || "") + " " + (r["Nom"] || ""));
+        const k2 = normaliser((r["Nom"] || "") + " " + (r["Prénom"] || ""));
+        if (k1 && !byNom.has(k1)) byNom.set(k1, email);
+        if (k2 && !byNom.has(k2)) byNom.set(k2, email);
+      });
 
       const locations = [];
       act.forEach((r) => {
@@ -614,22 +660,35 @@
         const k = l.chauffeur_normalise;
         if (!k) return;
         let ent = map.get(k);
-        if (!ent) { ent = { chauffeur: l.chauffeur, chauffeur_normalise: k, portable: l.portable, actuel: false, nb_locations: 0 }; map.set(k, ent); }
+        if (!ent) {
+          ent = { chauffeur: l.chauffeur, chauffeur_normalise: k, portable: l.portable, actuel: false, nb_locations: 0, email: null };
+          map.set(k, ent);
+        }
         ent.nb_locations++;
         if (l.actuel) { ent.actuel = true; ent.chauffeur = l.chauffeur; if (l.portable) ent.portable = l.portable; }
         if (!ent.portable && l.portable) ent.portable = l.portable;
       });
+
+      // Enrichissement avec les emails (téléphone d'abord, nom en secours)
+      let emailMatches = 0;
+      map.forEach((ent) => {
+        const ph = normPhone(ent.portable);
+        let em = ph && byPhone.get(ph);
+        if (!em) em = byNom.get(ent.chauffeur_normalise);
+        if (em) { ent.email = em; emailMatches++; }
+      });
       const chauffeurs = Array.from(map.values());
 
-      msg.innerHTML = '<span class="spin"></span> Mise à jour de la base (' + chauffeurs.length + ' chauffeurs)...';
+      msg.innerHTML = `<span class="spin"></span> Mise à jour de la base (${chauffeurs.length} chauffeurs, ${emailMatches} emails matchés)...`;
       await sb.from("locations_crm").delete().not("id", "is", null);
       await sb.from("chauffeurs_crm").delete().not("id", "is", null);
       await insererParLots("chauffeurs_crm", chauffeurs, 500);
       await insererParLots("locations_crm", locations, 500);
 
-      msg.innerHTML = '<span style="color:var(--green);font-weight:600;">Import terminé : ' + chauffeurs.length + ' chauffeurs, ' + locations.length + ' locations.</span>';
+      const partContacts = contactsFound ? `, ${emailMatches} emails matchés` : ", aucun fichier contacts fourni";
+      msg.innerHTML = `<span style="color:var(--green);font-weight:600;">Import terminé : ${chauffeurs.length} chauffeurs${partContacts}, ${locations.length} locations.</span>`;
       loadCrmStatus();
-      setTimeout(() => { msg.innerHTML = ""; }, 6000);
+      setTimeout(() => { msg.innerHTML = ""; }, 8000);
     } catch (err) {
       msg.innerHTML = '<span style="color:var(--danger);font-weight:600;">Erreur : ' + escapeHtml(err.message) + '</span>';
     } finally {
@@ -644,6 +703,7 @@
   $("parrainSearch").addEventListener("input", (e) => {
     parrainSelectionne = null;
     $("parrainHistorique").classList.add("hidden");
+    $("parrainEmail").value = "";
     const val = e.target.value.trim();
     clearTimeout(debounceTimer);
     if (val.length < 2) { $("parrainSuggest").classList.add("hidden"); $("parrainStatus").innerHTML = ""; return; }
@@ -665,8 +725,9 @@
     $("parrainStatus").innerHTML = "";
     box.innerHTML = data.map((c) => {
       const tag = c.actuel ? '<span class="tag tag-actuel">En location</span>' : '<span class="tag tag-ancien">Ancien</span>';
-      return `<div class="suggest-item" data-norm="${escapeHtml(c.chauffeur_normalise)}" data-nom="${escapeHtml(c.chauffeur)}">
-        <span><span class="nom">${escapeHtml(c.chauffeur)}</span><br><span class="meta">${escapeHtml(c.portable || "")} · ${c.nb_locations} location(s)</span></span>
+      const metaEmail = c.email ? ` · ${escapeHtml(c.email)}` : "";
+      return `<div class="suggest-item" data-norm="${escapeHtml(c.chauffeur_normalise)}" data-nom="${escapeHtml(c.chauffeur)}" data-email="${escapeHtml(c.email || "")}">
+        <span><span class="nom">${escapeHtml(c.chauffeur)}</span><br><span class="meta">${escapeHtml(c.portable || "")} · ${c.nb_locations} location(s)${metaEmail}</span></span>
         ${tag}</div>`;
     }).join("");
     box.classList.remove("hidden");
@@ -676,9 +737,13 @@
     const item = e.target.closest(".suggest-item");
     if (!item) return;
     $("parrainSearch").value = item.dataset.nom;
-    parrainSelectionne = { chauffeur: item.dataset.nom, chauffeur_normalise: item.dataset.norm };
+    parrainSelectionne = { chauffeur: item.dataset.nom, chauffeur_normalise: item.dataset.norm, email: item.dataset.email || "" };
+    $("parrainEmail").value = item.dataset.email || "";
     $("parrainSuggest").classList.add("hidden");
-    $("parrainStatus").innerHTML = '<span class="ps-ok">A déjà loué chez nous.</span>';
+    const statut = item.dataset.email
+      ? '<span class="ps-ok">A déjà loué chez nous. Email pré-rempli depuis le CRM.</span>'
+      : '<span class="ps-ok">A déjà loué chez nous.</span> <span class="ps-warn">Pas d\'email connu, à saisir.</span>';
+    $("parrainStatus").innerHTML = statut;
     chargerHistoriqueParrain(item.dataset.norm);
   });
 
