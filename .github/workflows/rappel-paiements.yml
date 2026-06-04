@@ -1,9 +1,9 @@
-name: Email de remerciement parrain
+name: Rappel paiements parrainages
 
 on:
   schedule:
-    # Toutes les 10 minutes
-    - cron: "*/10 * * * *"
+    # Tous les jours a 08:00 UTC (10h Paris en ete, 9h en hiver)
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,10 +18,11 @@ jobs:
         run: |
           npm init -y
           npm install nodemailer
-      - name: Envoyer les remerciements
+      - name: Envoyer le rappel
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: node .github/scripts/notif-parrainages.mjs
+          DEST_EMAIL: v.madryga@moov-in-cab.fr
+        run: node .github/scripts/rappel-paiements.mjs
