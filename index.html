@@ -33,11 +33,9 @@
     line-height: 1.5;
   }
 
-  /* ---------- Logo / monogramme ---------- */
-  .logo { display: inline-flex; align-items: center; gap: 12px; }
-  .logo svg { width: 30px; height: 30px; display: block; }
-  .logo .divider { width: 1px; height: 26px; background: currentColor; opacity: .55; }
-  .logo .word { font-weight: 800; letter-spacing: .14em; font-size: 17px; }
+  /* ---------- Logo ---------- */
+  .logo-img { height: 50px; width: auto; display: block; filter: brightness(0) invert(1); }
+  .logo-img-lg { height: 110px; margin: 0 auto 8px; }
 
   /* ---------- Animations ---------- */
   @keyframes driftBg {
@@ -233,22 +231,11 @@
   const MONTANT_PRIME = 100; // prime fixe en euros
 </script>
 
-<!-- Monogramme réutilisable -->
-<template id="logoSvg">
-  <svg viewBox="0 0 40 40" aria-hidden="true">
-    <path d="M5 33 L5 9 L20 25 L35 9 L35 33" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
-    <line x1="20" y1="17" x2="20" y2="33" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-  </svg>
-</template>
-
 <!-- ===================== CONNEXION ===================== -->
 <div id="authScreen" class="auth-wrap">
   <div class="auth-inner">
     <div class="auth-brand">
-      <span class="logo" data-logo style="color:#fff;">
-        <span class="divider"></span>
-        <span class="word">MOOV'IN.CAB</span>
-      </span>
+      <img src="logo.png" alt="MOOV'IN.CAB" class="logo-img logo-img-lg" />
       <span class="tag">Programme de parrainage</span>
     </div>
 
@@ -283,10 +270,7 @@
 <!-- ===================== APP ===================== -->
 <div id="app" class="hidden">
   <header class="topbar">
-    <span class="logo" data-logo style="color:#fff;">
-      <span class="divider"></span>
-      <span class="word">MOOV'IN.CAB</span>
-    </span>
+    <img src="logo.png" alt="MOOV'IN.CAB" class="logo-img" />
     <div class="user-zone">
       <span id="userEmail"></span>
       <button id="logoutBtn" class="btn-light btn-sm">Déconnexion</button>
@@ -370,12 +354,6 @@
 </div>
 
 <script>
-  // ---- Injection du monogramme ----
-  document.querySelectorAll("[data-logo]").forEach((el) => {
-    const svg = document.getElementById("logoSvg").content.cloneNode(true);
-    el.insertBefore(svg, el.firstChild);
-  });
-
   // ---- Supabase ----
   const isConfigured =
     SUPABASE_URL && !SUPABASE_URL.includes("VOTRE-PROJET") &&
@@ -703,7 +681,6 @@
   $("parrainSearch").addEventListener("input", (e) => {
     parrainSelectionne = null;
     $("parrainHistorique").classList.add("hidden");
-    $("parrainEmail").value = "";
     const val = e.target.value.trim();
     clearTimeout(debounceTimer);
     if (val.length < 2) { $("parrainSuggest").classList.add("hidden"); $("parrainStatus").innerHTML = ""; return; }
