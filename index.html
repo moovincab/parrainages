@@ -258,11 +258,6 @@
 
       <button id="authBtn" class="btn-primary" style="width:100%;">Se connecter</button>
       <div id="authMsg"></div>
-
-      <p style="margin-top:16px; font-size:13px; color:var(--muted);">
-        <span id="authSwitchText">Pas encore de compte ?</span>
-        <button id="authSwitch" class="btn-link">Créer un compte</button>
-      </p>
     </div>
   </div>
 </div>
@@ -363,7 +358,6 @@
   const $ = (id) => document.getElementById(id);
   const authScreen = $("authScreen");
   const app = $("app");
-  let mode = "login";
   let parrainagesData = [];
 
   function showMsg(el, text, type) {
@@ -391,15 +385,6 @@
 
   $("dateSignature").addEventListener("input", (e) => { $("paiementPreview").value = plusUnMois(e.target.value); });
 
-  $("authSwitch").addEventListener("click", () => {
-    mode = mode === "login" ? "signup" : "login";
-    $("authTitle").textContent = mode === "login" ? "Connexion" : "Créer un compte";
-    $("authBtn").textContent = mode === "login" ? "Se connecter" : "Créer le compte";
-    $("authSwitchText").textContent = mode === "login" ? "Pas encore de compte ?" : "Déjà un compte ?";
-    $("authSwitch").textContent = mode === "login" ? "Créer un compte" : "Se connecter";
-    showMsg($("authMsg"), "", "");
-  });
-
   $("authBtn").addEventListener("click", async () => {
     if (!sb) { showMsg($("authMsg"), "Supabase n'est pas configuré.", "err"); return; }
     const email = $("email").value.trim();
@@ -407,14 +392,8 @@
     if (!email || !password) { showMsg($("authMsg"), "Renseigne l'email et le mot de passe.", "err"); return; }
     $("authBtn").disabled = true;
     try {
-      if (mode === "login") {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else {
-        const { error } = await sb.auth.signUp({ email, password });
-        if (error) throw error;
-        showMsg($("authMsg"), "Compte créé. Si la confirmation par email est activée, vérifie ta boîte mail avant de te connecter.", "ok");
-      }
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
     } catch (err) {
       showMsg($("authMsg"), err.message || "Erreur de connexion.", "err");
     } finally { $("authBtn").disabled = false; }
